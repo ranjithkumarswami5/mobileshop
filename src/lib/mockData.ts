@@ -72,6 +72,7 @@ export const mockCoupons: Coupon[] = [
     isActive: false,
     usageCount: faker.number.int({ min: 5, max: 50 }),
     expiryDate: faker.date.past().toISOString(),
+    isUsed: true,
   }
 ];
 
@@ -96,7 +97,10 @@ for (let i = 0; i < 15; i++) {
     items,
     createdAt: faker.date.past().toISOString(),
     status: faker.helpers.arrayElement(['Pending', 'Shipped', 'Delivered', 'Cancelled']),
-    appliedCoupon: faker.helpers.maybe(() => faker.helpers.arrayElement(mockCoupons).code)
+    appliedCoupon: faker.helpers.maybe(() => faker.helpers.arrayElement(mockCoupons).code),
+    address: faker.location.streetAddress(),
+    mobileNumber: faker.phone.number('##########'),
+    pincode: faker.location.zipCode(),
   });
 }
 

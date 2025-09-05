@@ -29,6 +29,7 @@ export interface Coupon {
   isActive: boolean;
   expiryDate?: string;
   usageCount: number;
+  isUsed?: boolean;
 }
 
 export interface Order {
@@ -40,6 +41,9 @@ export interface Order {
   items: CartItem[];
   createdAt: string;
   status: 'Pending' | 'Shipped' | 'Delivered' | 'Cancelled';
+  address: string;
+  mobileNumber: string;
+  pincode: string;
 }
 
 export interface ServiceOrder {

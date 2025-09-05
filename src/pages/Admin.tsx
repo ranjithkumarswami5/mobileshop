@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format } from "date-fns"
 import {
-  Plus, Edit, Trash2, Package, DollarSign, TrendingUp, Eye,
+  Plus, Edit, Trash2, Package, DollarSign, Eye,
   ShoppingCart, Users, Wrench, ClipboardList, Ticket, CalendarIcon
 } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
@@ -14,13 +14,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { cn } from "@/lib/utils";
 
 import { useAuth } from '../context/AuthContext';
@@ -43,15 +45,15 @@ const formatDate = (dateString: string) => {
 // Schemas for validation
 const productSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
-  price: z.number().min(1, "Price is required"),
-  stock: z.number().min(0, "Stock is required"),
+  price: z.coerce.number().min(1, "Price is required"),
+  stock: z.coerce.number().min(0, "Stock is required"),
   imageUrl: z.string().url("Must be a valid URL"),
   category: z.enum(['phone', 'accessory']),
 });
 
 const couponSchema = z.object({
   code: z.string().min(4, "Code must be at least 4 characters").max(20),
-  discountPercent: z.number().min(1).max(100),
+  discountPercent: z.coerce.number().min(1).max(100),
   expiryDate: z.date().optional(),
 });
 
@@ -100,7 +102,6 @@ export function Admin() {
     fetchData();
   }, []);
 
-  // Always call useMemo to maintain hook order
   const totalInventoryValue = useMemo(() => {
     return products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   }, [products]);
@@ -241,10 +242,36 @@ const ProductsTab = ({ products, setProducts }: { products: Product[], setProduc
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingProduct ? 'Edit' : 'Add'} Product</DialogTitle></DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Form fields here */}
-            <Button type="submit">Save</Button>
-          </form>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem><FormLabel>Product Name</FormLabel><FormControl><Input placeholder="e.g., iPhone 15 Pro" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="price" render={({ field }) => (
+                  <FormItem><FormLabel>Price</FormLabel><FormControl><Input type="number" placeholder="79900" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="stock" render={({ field }) => (
+                  <FormItem><FormLabel>Stock</FormLabel><FormControl><Input type="number" placeholder="50" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name="imageUrl" render={({ field }) => (
+                <FormItem><FormLabel>Image URL</FormLabel><FormControl><Input placeholder="https://example.com/image.png" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="category" render={({ field }) => (
+                <FormItem><FormLabel>Category</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
+                    <SelectContent><SelectItem value="phone">Phone</SelectItem><SelectItem value="accessory">Accessory</SelectItem></SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit">Save Product</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </Card>
@@ -279,11 +306,16 @@ const OrdersTab = ({ orders }: { orders: Order[] }) => {
       <Dialog open={!!viewingOrder} onOpenChange={() => setViewingOrder(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Order Details</DialogTitle><DialogDescription>ID: {viewingOrder?.id}</DialogDescription></DialogHeader>
-          {viewingOrder && <div className="space-y-4">
-            <div><strong>Customer:</strong> {viewingOrder.customerName}</div>
-            <div><strong>Date:</strong> {formatDate(viewingOrder.createdAt)}</div>
-            <div><strong>Total:</strong> {formatPrice(viewingOrder.total)}</div>
-            <div className="space-y-2"><strong>Items:</strong>
+          {viewingOrder && <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <div><strong>Customer:</strong> {viewingOrder.customerName}</div>
+              <div><strong>Date:</strong> {formatDate(viewingOrder.createdAt)}</div>
+              <div><strong>Contact:</strong> {viewingOrder.mobileNumber}</div>
+              <div><strong>Total:</strong> {formatPrice(viewingOrder.total)}</div>
+            </div>
+            <div><strong>Address:</strong> {viewingOrder.address}, {viewingOrder.pincode}</div>
+            {viewingOrder.appliedCoupon && <div><strong>Coupon:</strong> <Badge>{viewingOrder.appliedCoupon}</Badge></div>}
+            <div className="space-y-2 pt-2 border-t"><strong>Items:</strong>
               {viewingOrder.items.map(item => <div key={item.product.id} className="flex justify-between items-center p-2 bg-muted/50 rounded-lg"><span>{item.product.name} (x{item.quantity})</span><span>{formatPrice(item.product.price * item.quantity)}</span></div>)}
             </div>
           </div>}
@@ -357,82 +389,26 @@ const AccountsTab = ({ users, setUsers }: { users: User[], setUsers: React.Dispa
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Create New Account</DialogTitle></DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Controller
-                name="email"
-                control={form.control}
-                render={({ field }) => (
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="user@example.com"
-                    {...field}
-                  />
-                )}
-              />
-              {form.formState.errors.email && (
-                <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mobileNumber">Mobile Number</Label>
-              <Controller
-                name="mobileNumber"
-                control={form.control}
-                render={({ field }) => (
-                  <Input
-                    id="mobileNumber"
-                    type="tel"
-                    placeholder="9876543210"
-                    {...field}
-                  />
-                )}
-              />
-              {form.formState.errors.mobileNumber && (
-                <p className="text-sm text-red-500">{form.formState.errors.mobileNumber.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="referralCode">Referral Code</Label>
-              <Controller
-                name="referralCode"
-                control={form.control}
-                render={({ field }) => (
-                  <Input
-                    id="referralCode"
-                    placeholder="REF-ABC123"
-                    {...field}
-                  />
-                )}
-              />
-              {form.formState.errors.referralCode && (
-                <p className="text-sm text-red-500">{form.formState.errors.referralCode.message}</p>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Controller
-                name="isAdmin"
-                control={form.control}
-                render={({ field }) => (
-                  <Switch
-                    id="isAdmin"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                )}
-              />
-              <Label htmlFor="isAdmin">Admin Privileges</Label>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? 'Creating...' : 'Create Account'}
-            </Button>
-          </form>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem><FormLabel>Email Address</FormLabel><FormControl><Input id="email" type="email" placeholder="user@example.com" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="mobileNumber" render={({ field }) => (
+                <FormItem><FormLabel>Mobile Number</FormLabel><FormControl><Input id="mobileNumber" type="tel" placeholder="9876543210" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="referralCode" render={({ field }) => (
+                <FormItem><FormLabel>Referral Code</FormLabel><FormControl><Input id="referralCode" placeholder="REF-ABC123" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="isAdmin" render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Admin Privileges</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
+              )} />
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? 'Creating...' : 'Create Account'}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </Card>
@@ -443,7 +419,7 @@ const ServiceEnrollmentTab = ({ setServiceOrders }: { setServiceOrders: React.Di
   const { toast } = useToast();
   const form = useForm<z.infer<typeof serviceOrderSchema>>({
     resolver: zodResolver(serviceOrderSchema),
-    defaultValues: { customerName: '', contactNumber: '', deviceModel: '', serialNumber: '', issueDescription: '' } as const,
+    defaultValues: { customerName: '', contactNumber: '', deviceModel: '', serialNumber: '', issueDescription: '' },
   });
 
   const onSubmit = (data: z.infer<typeof serviceOrderSchema>) => {
@@ -462,10 +438,26 @@ const ServiceEnrollmentTab = ({ setServiceOrders }: { setServiceOrders: React.Di
     <Card className="bg-card/50 backdrop-blur-sm border-border/50 rounded-2xl">
       <CardHeader><CardTitle>Repairs & Service Enrollment</CardTitle></CardHeader>
       <CardContent>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-lg mx-auto">
-          {/* Form fields here */}
-          <Button type="submit" className="w-full">Create Service Order</Button>
-        </form>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-lg mx-auto">
+            <FormField control={form.control} name="customerName" render={({ field }) => (
+              <FormItem><FormLabel>Customer Name</FormLabel><FormControl><Input placeholder="John Doe" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="contactNumber" render={({ field }) => (
+              <FormItem><FormLabel>Contact Number</FormLabel><FormControl><Input type="tel" placeholder="9876543210" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="deviceModel" render={({ field }) => (
+              <FormItem><FormLabel>Device Model</FormLabel><FormControl><Input placeholder="e.g., iPhone 14 Pro" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="serialNumber" render={({ field }) => (
+              <FormItem><FormLabel>Serial Number</FormLabel><FormControl><Input placeholder="F17G83JCH21" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="issueDescription" render={({ field }) => (
+              <FormItem><FormLabel>Issue Description</FormLabel><FormControl><Textarea placeholder="Describe the issue with the device..." {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <Button type="submit" className="w-full">Create Service Order</Button>
+          </form>
+        </Form>
       </CardContent>
     </Card>
   );
@@ -560,10 +552,36 @@ const CouponsTab = ({ coupons, setCoupons }: { coupons: Coupon[], setCoupons: Re
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Create New Coupon</DialogTitle></DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Form fields here */}
-            <Button type="submit">Create Coupon</Button>
-          </form>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField control={form.control} name="code" render={({ field }) => (
+                <FormItem><FormLabel>Coupon Code</FormLabel><FormControl><Input placeholder="e.g., SUMMER25" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="discountPercent" render={({ field }) => (
+                <FormItem><FormLabel>Discount (%)</FormLabel><FormControl><Input type="number" placeholder="10" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="expiryDate" render={({ field }) => (
+                <FormItem className="flex flex-col"><FormLabel>Expiry Date (Optional)</FormLabel>
+                  <Popover><PopoverTrigger asChild>
+                      <FormControl>
+                        <Button variant={"outline"} className={cn("w-[240px] pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                          {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                    </PopoverContent>
+                  </Popover><FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit">Create Coupon</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </Card>

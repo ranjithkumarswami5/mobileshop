@@ -150,7 +150,7 @@ export function Auth() {
           <CardContent>
             {isLogin ? (
               <Form {...loginForm}>
-                <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4" key="login-form">
                   <FormField
                     control={loginForm.control}
                     name="identifier"
@@ -214,7 +214,7 @@ export function Auth() {
               </Form>
             ) : (
               <Form {...signupForm}>
-                <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4">
+                <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4" key="signup-form">
                   <FormField
                     control={signupForm.control}
                     name="email"
@@ -228,7 +228,6 @@ export function Auth() {
                             className="rounded-xl"
                             disabled={loading}
                             autoComplete="email"
-                            style={{ pointerEvents: 'auto' }}
                             {...field}
                           />
                         </FormControl>
@@ -251,7 +250,6 @@ export function Auth() {
                             disabled={loading}
                             autoComplete="tel"
                             maxLength={10}
-                            style={{ pointerEvents: 'auto' }}
                             {...field}
                           />
                         </FormControl>

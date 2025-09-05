@@ -1,70 +1,37 @@
-import type { Product, User, Coupon, Order, CartItem, ServiceOrder } from '../types';
+import type { Product, User, Coupon, Order, ServiceOrder } from '../types';
+import { mockProducts, mockUsers, mockCoupons, mockOrders, mockServiceOrders } from './mockData';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+// Helper to simulate network delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function getProducts(): Promise<Product[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/products`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    throw error;
-  }
+  await delay(300); // Simulate network latency
+  console.log("Returning mock products from src/lib/database.ts");
+  return mockProducts;
 }
 
 export async function getUsers(): Promise<User[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/users`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    throw error;
-  }
+  await delay(300);
+  console.log("Returning mock users from src/lib/database.ts");
+  return mockUsers;
 }
 
 export async function getCoupons(): Promise<Coupon[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/coupons`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching coupons:', error);
-    throw error;
-  }
+  await delay(300);
+  console.log("Returning mock coupons from src/lib/database.ts");
+  return mockCoupons;
 }
 
 export async function getOrders(): Promise<Order[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/orders`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching orders:', error);
-    throw error;
-  }
+  await delay(300);
+  console.log("Returning mock orders from src/lib/database.ts");
+  return mockOrders;
 }
 
 export async function getServiceOrders(): Promise<ServiceOrder[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/service-orders`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching service orders:', error);
-    throw error;
-  }
+  await delay(300);
+  console.log("Returning mock service orders from src/lib/database.ts");
+  return mockServiceOrders;
 }
 
 // Add more functions as needed, like insert, update, etc.

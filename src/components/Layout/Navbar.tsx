@@ -1,15 +1,16 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  Home, 
-  ShoppingCart, 
-  User, 
-  Share, 
+import {
+  Home,
+  ShoppingCart,
+  User,
+  Share,
   Settings,
   LogOut,
   LogIn,
-  Menu
+  Menu,
+  Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,7 @@ export function Navbar() {
   const navItems = [
     { path: '/', icon: Home, label: 'Home', public: true },
     { path: '/cart', icon: ShoppingCart, label: 'Cart', badge: totalItems, public: true },
+    { path: '/orders', icon: Package, label: 'My Orders', public: false },
     { path: '/referral', icon: Share, label: 'Referral', public: false },
     { path: '/profile', icon: User, label: 'Profile', public: false },
   ];

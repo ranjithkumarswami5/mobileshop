@@ -41,8 +41,9 @@ export function Cart() {
     }).format(price);
   };
 
-  const applyCoupon = () => {
-    const coupon = availableCoupons.find(c => c.code === couponCode);
+  const applyCoupon = (code?: string) => {
+    const codeToApply = code || couponCode;
+    const coupon = availableCoupons.find(c => c.code === codeToApply);
     if (coupon && coupon.isActive) {
       setAppliedCoupon({ code: coupon.code, discount: coupon.discountPercent });
       toast({
@@ -293,22 +294,72 @@ export function Cart() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex space-x-2">
-                    <Input
-                      placeholder="Enter coupon code"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      className="rounded-xl"
-                    />
-                    <Button 
-                      variant="outline" 
-                      onClick={applyCoupon}
-                      disabled={!couponCode.trim()}
-                      className="rounded-xl"
-                    >
-                      Apply
-                    </Button>
-                  </div>
+                  <>
+                    <div className="flex space-x-2">
+                      <Input
+                        placeholder="Enter coupon code"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        className="rounded-xl"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => applyCoupon()}
+                        disabled={!couponCode.trim()}
+                        className="rounded-xl"
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                    
+                    {/* Available Coupons Display */}
+                    {availableCoupons.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Available coupons:</p>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {availableCoupons.slice(0, 3).map((coupon) => (
+                            <div
+                              key={coupon.id}
+                              className="flex items-center justify-between p-2 bg-muted/30 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => applyCoupon(coupon.code)}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="text-xs font-medium">
+                                    {coupon.code}
+                                  </Badge>
+                                  <span className="text-sm font-medium text-green-600">
+                                    {coupon.discountPercent}% OFF
+                                  </span>
+                                </div>
+                                {coupon.expiryDate && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Expires: {new Date(coupon.expiryDate).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs h-6 px-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCouponCode(coupon.code);
+                                }}
+                              >
+                                Use
+                              </Button>
+                            </div>
+                          ))}
+                          {availableCoupons.length > 3 && (
+                            <p className="text-xs text-muted-foreground text-center">
+                              +{availableCoupons.length - 3} more coupons available
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -423,39 +474,6 @@ export function Cart() {
               </div>
             </div>
 
-            {/* Available Coupons */}
-            {availableCoupons.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="font-medium">Available Coupons</h4>
-                <div className="space-y-2">
-                  {availableCoupons.map((coupon) => (
-                    <div
-                      key={coupon.id}
-                      className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-lg cursor-pointer hover:bg-primary/10"
-                      onClick={() => setOrderForm(prev => ({ ...prev, couponCode: coupon.code }))}
-                    >
-                      <div>
-                        <div className="font-medium text-primary">{coupon.code}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {coupon.discountPercent}% off
-                          {coupon.expiryDate && ` • Expires ${new Date(coupon.expiryDate).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOrderForm(prev => ({ ...prev, couponCode: coupon.code }));
-                        }}
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Coupon Code Input */}
             <div className="space-y-2">

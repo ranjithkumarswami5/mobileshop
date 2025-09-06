@@ -99,6 +99,41 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
+// Get user-specific orders
+app.get('/api/orders/user/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const result = await pool.query(`
+      SELECT o.*, u.email
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE u.email = $1 OR o.mobile_number IN (
+        SELECT mobile_number FROM users WHERE email = $1
+      )
+      ORDER BY o.created_at DESC
+    `, [email]);
+    
+    const orders = result.rows.map(row => ({
+      id: row.id,
+      customerName: row.customer_name,
+      userId: row.user_id,
+      total: row.total,
+      items: row.items,
+      createdAt: row.created_at,
+      status: row.status,
+      appliedCoupon: row.applied_coupon,
+      address: row.address,
+      mobileNumber: row.mobile_number,
+      pincode: row.pincode,
+    }));
+    
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching user orders:', error);
+    res.status(500).json({ error: 'Failed to fetch user orders' });
+  }
+});
+
 // Get all coupons
 app.get('/api/coupons', async (req, res) => {
   try {
@@ -142,6 +177,71 @@ app.get('/api/coupons/user/:mobile', async (req, res) => {
   } catch (error) {
     console.error('Error fetching user coupons:', error);
     res.status(500).json({ error: 'Failed to fetch user coupons' });
+  }
+});
+
+// Validate coupon endpoint
+app.post('/api/coupons/validate', async (req, res) => {
+  try {
+    const { code, userMobile } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ error: 'Coupon code is required' });
+    }
+
+    // Check if coupon exists and is active
+    const couponResult = await pool.query(
+      'SELECT * FROM coupons WHERE code = $1 AND is_active = true',
+      [code]
+    );
+
+    if (couponResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or inactive coupon code' });
+    }
+
+    const coupon = couponResult.rows[0];
+
+    // Check if coupon has expiry date and if it's expired
+    if (coupon.expiry_date && new Date(coupon.expiry_date) < new Date()) {
+      return res.status(400).json({ error: 'Coupon has expired' });
+    }
+
+    // Check if coupon is user-specific
+    if (coupon.user_mobile && coupon.user_mobile !== userMobile) {
+      return res.status(400).json({ error: 'This coupon is not valid for your account' });
+    }
+
+    // Check if coupon has already been used in orders
+    const usedInOrders = await pool.query(
+      'SELECT * FROM orders WHERE applied_coupon = $1',
+      [code]
+    );
+
+    // Check if coupon has already been used in service orders
+    const usedInServiceOrders = await pool.query(
+      'SELECT * FROM service_orders WHERE applied_coupon = $1',
+      [code]
+    );
+
+    if (usedInOrders.rows.length > 0 || usedInServiceOrders.rows.length > 0) {
+      return res.status(400).json({ error: 'Coupon has already been used' });
+    }
+
+    // Return valid coupon details
+    res.json({
+      valid: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        discountPercent: coupon.discount_percent,
+        userMobile: coupon.user_mobile,
+        expiryDate: coupon.expiry_date,
+      }
+    });
+
+  } catch (error) {
+    console.error('Error validating coupon:', error);
+    res.status(500).json({ error: 'Failed to validate coupon' });
   }
 });
 
@@ -389,10 +489,16 @@ app.post('/api/service-orders', async (req, res) => {
         return res.status(400).json({ error: 'Invalid or inactive coupon code' });
       }
 
-      // Check if coupon has already been used
+      // Check if coupon has already been used in service orders
       const usedCoupon = await pool.query('SELECT * FROM service_orders WHERE applied_coupon = $1', [appliedCoupon]);
       if (usedCoupon.rows.length > 0) {
         return res.status(400).json({ error: 'Coupon has already been used' });
+      }
+
+      // Check if coupon has expiry date and if it's expired
+      const coupon = couponResult.rows[0];
+      if (coupon.expiry_date && new Date(coupon.expiry_date) < new Date()) {
+        return res.status(400).json({ error: 'Coupon has expired' });
       }
     }
 
@@ -400,6 +506,14 @@ app.post('/api/service-orders', async (req, res) => {
       'INSERT INTO service_orders (id, customer_name, contact_number, device_model, serial_number, issue_description, price, applied_coupon, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
       [id, customerName, contactNumber, deviceModel, serialNumber, issueDescription, price, appliedCoupon, status]
     );
+
+    // If coupon was used, mark it as inactive (expired after use)
+    if (appliedCoupon) {
+      await pool.query(
+        'UPDATE coupons SET is_active = false, usage_count = usage_count + 1 WHERE code = $1',
+        [appliedCoupon]
+      );
+    }
     const serviceOrder = {
       id: result.rows[0].id,
       customerName: result.rows[0].customer_name,
@@ -470,13 +584,58 @@ app.delete('/api/service-orders/:id', async (req, res) => {
 // Create order
 app.post('/api/orders', async (req, res) => {
   try {
+    console.log('Order request received:', req.body);
     const { customerName, userId, total, items, appliedCoupon, address, mobileNumber, pincode } = req.body;
+
+    // Validate and handle coupon if provided
+    if (appliedCoupon) {
+      console.log('Validating coupon:', appliedCoupon);
+      const couponResult = await pool.query(
+        'SELECT * FROM coupons WHERE code = $1 AND is_active = true',
+        [appliedCoupon]
+      );
+
+      console.log('Coupon query result:', couponResult.rows);
+
+      if (couponResult.rows.length === 0) {
+        console.log('Coupon not found or inactive');
+        return res.status(400).json({ error: 'Invalid or inactive coupon code' });
+      }
+
+      // Check if coupon has already been used in orders
+      const usedCouponInOrders = await pool.query(
+        'SELECT * FROM orders WHERE applied_coupon = $1',
+        [appliedCoupon]
+      );
+
+      console.log('Used coupon check result:', usedCouponInOrders.rows);
+
+      if (usedCouponInOrders.rows.length > 0) {
+        console.log('Coupon already used');
+        return res.status(400).json({ error: 'Coupon has already been used' });
+      }
+
+      // Check if coupon has expiry date and if it's expired
+      const coupon = couponResult.rows[0];
+      if (coupon.expiry_date && new Date(coupon.expiry_date) < new Date()) {
+        console.log('Coupon expired');
+        return res.status(400).json({ error: 'Coupon has expired' });
+      }
+    }
 
     const id = require('crypto').randomUUID();
     const result = await pool.query(
       'INSERT INTO orders (id, customer_name, user_id, total, items, applied_coupon, address, mobile_number, pincode) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
       [id, customerName, userId, total, JSON.stringify(items), appliedCoupon, address, mobileNumber, pincode]
     );
+
+    // If coupon was used, mark it as inactive (expired after use)
+    if (appliedCoupon) {
+      await pool.query(
+        'UPDATE coupons SET is_active = false, usage_count = usage_count + 1 WHERE code = $1',
+        [appliedCoupon]
+      );
+    }
 
     const order = {
       id: result.rows[0].id,
@@ -495,7 +654,9 @@ app.post('/api/orders', async (req, res) => {
     res.status(201).json(order);
   } catch (error) {
     console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
+    console.error('Error details:', error.message);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ error: 'Failed to create order', details: error.message });
   }
 });
 
@@ -504,17 +665,23 @@ app.post('/api/orders', async (req, res) => {
 // Get cart items for a user/session
 app.get('/api/cart', async (req, res) => {
   try {
-    const { userId, sessionId } = req.query;
+    const { userEmail, sessionId } = req.query;
 
-    if (!userId && !sessionId) {
-      return res.status(400).json({ error: 'userId or sessionId is required' });
+    if (!userEmail && !sessionId) {
+      return res.status(400).json({ error: 'userEmail or sessionId is required' });
     }
 
-    const query = userId
-      ? 'SELECT c.*, p.name, p.price, p.image_url, p.category FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = $1 ORDER BY c.created_at'
-      : 'SELECT c.*, p.name, p.price, p.image_url, p.category FROM cart c JOIN products p ON c.product_id = p.id WHERE c.session_id = $1 ORDER BY c.created_at';
+    // Ensure proper isolation: if userEmail is provided, only get user cart; if sessionId is provided, only get session cart
+    let query, params;
+    if (userEmail) {
+      query = 'SELECT c.*, p.name, p.price, p.image_url, p.category FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_email = $1 AND c.session_id IS NULL ORDER BY c.created_at';
+      params = [userEmail];
+    } else {
+      query = 'SELECT c.*, p.name, p.price, p.image_url, p.category FROM cart c JOIN products p ON c.product_id = p.id WHERE c.session_id = $1 AND c.user_email IS NULL ORDER BY c.created_at';
+      params = [sessionId];
+    }
 
-    const result = await pool.query(query, [userId || sessionId]);
+    const result = await pool.query(query, params);
 
     const cartItems = result.rows.map(row => ({
       id: row.id,
@@ -538,20 +705,25 @@ app.get('/api/cart', async (req, res) => {
 // Add item to cart
 app.post('/api/cart', async (req, res) => {
   try {
-    const { productId, quantity = 1, userId, sessionId } = req.body;
+    const { productId, quantity = 1, userEmail, sessionId } = req.body;
 
-    if (!productId || (!userId && !sessionId)) {
-      return res.status(400).json({ error: 'productId and userId/sessionId are required' });
+    if (!productId || (!userEmail && !sessionId)) {
+      return res.status(400).json({ error: 'productId and userEmail/sessionId are required' });
     }
 
     const id = require('crypto').randomUUID();
 
-    // Check if item already exists in cart
-    const existingQuery = userId
-      ? 'SELECT id, quantity FROM cart WHERE user_id = $1 AND product_id = $2'
-      : 'SELECT id, quantity FROM cart WHERE session_id = $1 AND product_id = $2';
+    // Ensure proper isolation: check for existing items with proper null constraints
+    let existingQuery, existingParams;
+    if (userEmail) {
+      existingQuery = 'SELECT id, quantity FROM cart WHERE user_email = $1 AND product_id = $2 AND session_id IS NULL';
+      existingParams = [userEmail, productId];
+    } else {
+      existingQuery = 'SELECT id, quantity FROM cart WHERE session_id = $1 AND product_id = $2 AND user_email IS NULL';
+      existingParams = [sessionId, productId];
+    }
 
-    const existing = await pool.query(existingQuery, [userId || sessionId, productId]);
+    const existing = await pool.query(existingQuery, existingParams);
 
     if (existing.rows.length > 0) {
       // Update quantity
@@ -580,12 +752,17 @@ app.post('/api/cart', async (req, res) => {
 
       res.json(cartItem);
     } else {
-      // Insert new item
-      const insertQuery = userId
-        ? 'INSERT INTO cart (id, user_id, product_id, quantity) VALUES ($1, $2, $3, $4) RETURNING *'
-        : 'INSERT INTO cart (id, session_id, product_id, quantity) VALUES ($1, $2, $3, $4) RETURNING *';
+      // Insert new item with proper null constraints for isolation
+      let insertQuery, insertParams;
+      if (userEmail) {
+        insertQuery = 'INSERT INTO cart (id, user_email, session_id, product_id, quantity) VALUES ($1, $2, NULL, $3, $4) RETURNING *';
+        insertParams = [id, userEmail, productId, quantity];
+      } else {
+        insertQuery = 'INSERT INTO cart (id, user_email, session_id, product_id, quantity) VALUES ($1, NULL, $2, $3, $4) RETURNING *';
+        insertParams = [id, sessionId, productId, quantity];
+      }
 
-      const result = await pool.query(insertQuery, [id, userId || sessionId, productId, quantity]);
+      const result = await pool.query(insertQuery, insertParams);
 
       const itemResult = await pool.query(
         'SELECT c.*, p.name, p.price, p.image_url, p.category FROM cart c JOIN products p ON c.product_id = p.id WHERE c.id = $1',
@@ -677,17 +854,23 @@ app.delete('/api/cart/:id', async (req, res) => {
 // Clear entire cart for user/session
 app.delete('/api/cart', async (req, res) => {
   try {
-    const { userId, sessionId } = req.query;
+    const { userEmail, sessionId } = req.query;
 
-    if (!userId && !sessionId) {
-      return res.status(400).json({ error: 'userId or sessionId is required' });
+    if (!userEmail && !sessionId) {
+      return res.status(400).json({ error: 'userEmail or sessionId is required' });
     }
 
-    const query = userId
-      ? 'DELETE FROM cart WHERE user_id = $1'
-      : 'DELETE FROM cart WHERE session_id = $1';
+    // Ensure proper isolation when clearing cart
+    let query, params;
+    if (userEmail) {
+      query = 'DELETE FROM cart WHERE user_email = $1 AND session_id IS NULL';
+      params = [userEmail];
+    } else {
+      query = 'DELETE FROM cart WHERE session_id = $1 AND user_email IS NULL';
+      params = [sessionId];
+    }
 
-    await pool.query(query, [userId || sessionId]);
+    await pool.query(query, params);
     res.json({ message: 'Cart cleared successfully' });
   } catch (error) {
     console.error('Error clearing cart:', error);

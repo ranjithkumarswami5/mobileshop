@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { CartContextType, CartItem, Product } from '../types';
+import type { CartContextType, CartItem, Product, User } from '../types';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
@@ -17,43 +18,96 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [sessionId] = useState(getSessionId());
+  const { user } = useAuth();
 
-  // Load cart from database
+  // Migrate session cart to user cart when user logs in
+  const migrateSessionCartToUser = async (userEmail: string) => {
+    try {
+      console.log('Migrating session cart to user cart...');
+      
+      // Get session cart items
+      const sessionResponse = await fetch(`http://localhost:3001/api/cart?sessionId=${sessionId}`);
+      if (!sessionResponse.ok) return;
+      
+      const sessionItems = await sessionResponse.json();
+      if (sessionItems.length === 0) return;
+      
+      console.log('Found session cart items to migrate:', sessionItems);
+      
+      // Add each session item to user cart
+      for (const item of sessionItems) {
+        await fetch('http://localhost:3001/api/cart', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            productId: item.product.id,
+            quantity: item.quantity,
+            userEmail: userEmail,
+          }),
+        });
+      }
+      
+      // Clear session cart after migration
+      await fetch(`http://localhost:3001/api/cart?sessionId=${sessionId}`, {
+        method: 'DELETE',
+      });
+      
+      console.log('Session cart migrated to user cart successfully');
+    } catch (error) {
+      console.error('Error migrating session cart to user cart:', error);
+    }
+  };
+
+  // Load cart from database - use userEmail if logged in, sessionId if not
   useEffect(() => {
     const loadCart = async () => {
       try {
-        const response = await fetch(`http://localhost:3001/api/cart?sessionId=${sessionId}`);
+        setIsLoaded(false);
+        
+        // If user just logged in, migrate session cart first
+        if (user) {
+          await migrateSessionCartToUser(user.email);
+        }
+        
+        const queryParam = user ? `userEmail=${user.email}` : `sessionId=${sessionId}`;
+        const response = await fetch(`http://localhost:3001/api/cart?${queryParam}`);
         if (response.ok) {
           const cartItems = await response.json();
-          console.log('Loading cart from database:', cartItems);
+          console.log('Loading cart from database:', cartItems, 'for', user ? `user ${user.email}` : `session ${sessionId}`);
           setItems(cartItems);
         } else {
           console.error('Failed to load cart from database');
+          setItems([]); // Clear items on error
         }
       } catch (error) {
         console.error('Error loading cart from database:', error);
+        setItems([]); // Clear items on error
       } finally {
         setIsLoaded(true);
       }
     };
 
     loadCart();
-  }, [sessionId]);
+  }, [sessionId, user]); // Reload cart when user changes
 
   const addToCart = async (product: Product, quantity = 1) => {
     try {
-      console.log('Adding to cart:', { productId: product.id, quantity, sessionId });
+      const requestBody = {
+        productId: product.id,
+        quantity,
+        ...(user ? { userEmail: user.email } : { sessionId })
+      };
+      
+      console.log('Adding to cart:', requestBody);
 
       const response = await fetch('http://localhost:3001/api/cart', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          productId: product.id,
-          quantity,
-          sessionId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       console.log('API Response status:', response.status);
@@ -142,13 +196,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/cart?sessionId=${sessionId}`, {
+      const queryParam = user ? `userEmail=${user.email}` : `sessionId=${sessionId}`;
+      const response = await fetch(`http://localhost:3001/api/cart?${queryParam}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         setItems([]);
-        console.log('Cart cleared successfully');
+        console.log('Cart cleared successfully for', user ? `user ${user.email}` : `session ${sessionId}`);
       } else {
         console.error('Failed to clear cart');
       }

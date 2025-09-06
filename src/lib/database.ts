@@ -80,6 +80,41 @@ export async function getUserCoupons(mobileNumber: string): Promise<Coupon[]> {
   }
 }
 
+export async function getUserOrders(userEmail: string): Promise<Order[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/orders/user/${encodeURIComponent(userEmail)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user orders:', error);
+    throw error;
+  }
+}
+
+export async function validateCoupon(code: string, userMobile?: string): Promise<{ valid: boolean; coupon?: any; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/coupons/validate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code, userMobile }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { valid: false, error: errorData.error };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error validating coupon:', error);
+    return { valid: false, error: 'Failed to validate coupon' };
+  }
+}
+
 export async function getExpenses(): Promise<any[]> {
   try {
     const response = await fetch(`${API_BASE_URL}/expenses`);

@@ -8,6 +8,7 @@ import { Layout } from './components/Layout/Layout';
 import { Auth } from './pages/Auth';
 import { Home } from './pages/Home';
 import { Cart } from './pages/Cart';
+import { Orders } from './pages/Orders';
 import { Referral } from './pages/Referral';
 import { Profile } from './pages/Profile';
 import { Admin } from './pages/Admin';
@@ -45,17 +46,21 @@ function AppContent() {
                   <Route path="/product/:id" element={<ProductDetail />} />
 
                   {/* Protected Routes */}
-                  <Route 
-                    path="/profile" 
-                    element={<ProtectedRoute><Profile /></ProtectedRoute>} 
+                  <Route
+                    path="/orders"
+                    element={<ProtectedRoute><Orders /></ProtectedRoute>}
                   />
-                  <Route 
-                    path="/referral" 
-                    element={<ProtectedRoute><Referral /></ProtectedRoute>} 
+                  <Route
+                    path="/profile"
+                    element={<ProtectedRoute><Profile /></ProtectedRoute>}
                   />
-                  <Route 
-                    path="/admin" 
-                    element={<ProtectedRoute><Admin /></ProtectedRoute>} 
+                  <Route
+                    path="/referral"
+                    element={<ProtectedRoute><Referral /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/admin"
+                    element={<ProtectedRoute><Admin /></ProtectedRoute>}
                   />
                 </Routes>
               </Layout>

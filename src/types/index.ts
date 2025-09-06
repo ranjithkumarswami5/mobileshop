@@ -18,6 +18,7 @@ export interface Product {
 }
 
 export interface CartItem {
+  id: string;
   product: Product;
   quantity: number;
 }
@@ -26,10 +27,12 @@ export interface Coupon {
   id: string;
   code: string;
   discountPercent: number;
+  userMobile?: string;
   isActive: boolean;
   expiryDate?: string;
   usageCount: number;
   isUsed?: boolean;
+  createdAt?: string;
 }
 
 export interface Order {
@@ -53,6 +56,8 @@ export interface ServiceOrder {
   deviceModel: string;
   serialNumber: string;
   issueDescription: string;
+  price?: number;
+  appliedCoupon?: string;
   status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
   createdAt: string;
 }
@@ -72,4 +77,5 @@ export interface CartContextType {
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   total: number;
+  isLoaded: boolean;
 }

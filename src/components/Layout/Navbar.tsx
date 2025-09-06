@@ -26,6 +26,13 @@ export function Navbar() {
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Debug logging for navbar state
+  console.log('Navbar - User state:', user);
+  console.log('Navbar - Cart items:', totalItems);
+  console.log('Navbar - Is user logged in:', !!user);
+  console.log('Navbar - User is admin:', user?.isAdmin);
+  console.log('Navbar - Current location:', location.pathname);
+
   const navItems = [
     { path: '/', icon: Home, label: 'Home', public: true },
     { path: '/cart', icon: ShoppingCart, label: 'Cart', badge: totalItems, public: true },
@@ -39,15 +46,17 @@ export function Navbar() {
 
   const visibleNavItems = navItems.filter(item => item.public || !!user);
 
+  console.log('Navbar - Rendering logo');
+
   return (
-    <motion.nav 
+    <motion.nav
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          <Link to="/">
+          <Link to="/" onClick={() => console.log('Navbar - Logo link clicked')}>
             <Logo className="h-12" />
           </Link>
 
@@ -77,14 +86,17 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={logout}
+                onClick={() => {
+                  console.log('Navbar - Logout button clicked');
+                  logout();
+                }}
                 className="text-muted-foreground hover:text-destructive"
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>
             ) : (
-              <Link to="/auth">
+              <Link to="/auth" onClick={() => console.log('Navbar - Login button clicked, navigating to /auth')}>
                 <Button variant="default" size="sm">
                   <LogIn className="h-4 w-4 mr-2" />
                   Login
@@ -136,19 +148,22 @@ export function Navbar() {
                 </div>
                 <div className="p-4 mt-auto border-t space-y-4">
                   {user ? (
-                    <SheetClose asChild>
-                      <Button
-                        variant="ghost"
-                        onClick={logout}
-                        className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 text-base"
-                      >
-                        <LogOut className="h-4 w-4 mr-3" />
-                        Logout
-                      </Button>
-                    </SheetClose>
+                     <SheetClose asChild>
+                       <Button
+                         variant="ghost"
+                         onClick={() => {
+                           console.log('Navbar - Mobile logout button clicked');
+                           logout();
+                         }}
+                         className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 text-base"
+                       >
+                         <LogOut className="h-4 w-4 mr-3" />
+                         Logout
+                       </Button>
+                     </SheetClose>
                   ) : (
                      <SheetClose asChild>
-                       <Link to="/auth" className="w-full">
+                       <Link to="/auth" className="w-full" onClick={() => console.log('Navbar - Mobile login button clicked')}>
                         <Button variant="default" className="w-full text-base">
                           <LogIn className="h-4 w-4 mr-3" />
                           Login / Sign Up

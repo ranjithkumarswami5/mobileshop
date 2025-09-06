@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Minus, Plus, Trash2, ShoppingBag, Tag, CheckCircle } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingBag, Tag, CheckCircle, MapPin, Phone, Hash } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { getCoupons } from '../lib/database';
+import type { Coupon } from '../types';
 
 export function Cart() {
   const { items, updateQuantity, removeFromCart, total, clearCart } = useCart();
@@ -19,6 +23,15 @@ export function Cart() {
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showOrderDialog, setShowOrderDialog] = useState(false);
+  const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([]);
+  const [orderForm, setOrderForm] = useState({
+    customerName: '',
+    mobileNumber: '',
+    address: '',
+    pincode: '',
+    couponCode: ''
+  });
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -29,11 +42,12 @@ export function Cart() {
   };
 
   const applyCoupon = () => {
-    if (couponCode === 'WELCOME10' || couponCode === 'REFER10') {
-      setAppliedCoupon({ code: couponCode, discount: 10 });
+    const coupon = availableCoupons.find(c => c.code === couponCode);
+    if (coupon && coupon.isActive) {
+      setAppliedCoupon({ code: coupon.code, discount: coupon.discountPercent });
       toast({
         title: "Coupon applied!",
-        description: `You saved 10% with code ${couponCode}`,
+        description: `You saved ${coupon.discountPercent}% with code ${coupon.code}`,
       });
       setCouponCode('');
     } else {
@@ -56,7 +70,20 @@ export function Cart() {
   const discount = appliedCoupon ? (total * appliedCoupon.discount) / 100 : 0;
   const finalTotal = total - discount;
 
-  const handleCheckout = async () => {
+  // Load available coupons
+  useEffect(() => {
+    const loadCoupons = async () => {
+      try {
+        const coupons = await getCoupons();
+        setAvailableCoupons(coupons.filter(coupon => coupon.isActive));
+      } catch (error) {
+        console.error('Error loading coupons:', error);
+      }
+    };
+    loadCoupons();
+  }, []);
+
+  const handleCheckout = () => {
     if (!user) {
       toast({
         title: "Login Required",
@@ -66,18 +93,62 @@ export function Cart() {
       return;
     }
 
+    setShowOrderDialog(true);
+  };
+
+  const handlePlaceOrder = async () => {
     setIsProcessing(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Order placed successfully!",
-      description: `Your order for ${formatPrice(finalTotal)} has been confirmed.`,
-    });
-    
-    clearCart();
-    setAppliedCoupon(null);
-    setIsProcessing(false);
+
+    try {
+      // Create order via API
+      const orderData = {
+        customerName: orderForm.customerName,
+        userId: user?.id,
+        total: finalTotal,
+        items: items,
+        appliedCoupon: appliedCoupon?.code,
+        address: orderForm.address,
+        mobileNumber: orderForm.mobileNumber,
+        pincode: orderForm.pincode,
+      };
+
+      const response = await fetch('http://localhost:3001/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Order placed successfully!",
+          description: `Your order for ${formatPrice(finalTotal)} has been confirmed.`,
+        });
+
+        clearCart();
+        setAppliedCoupon(null);
+        setShowOrderDialog(false);
+        setOrderForm({
+          customerName: '',
+          mobileNumber: '',
+          address: '',
+          pincode: '',
+          couponCode: ''
+        });
+      } else {
+        throw new Error('Failed to place order');
+      }
+    } catch (error) {
+      console.error('Error placing order:', error);
+      toast({
+        title: "Order failed",
+        description: "There was an error placing your order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0) {
@@ -272,6 +343,151 @@ export function Cart() {
           </Card>
         </motion.div>
       </div>
+
+      {/* Order Confirmation Dialog */}
+      <Dialog open={showOrderDialog} onOpenChange={setShowOrderDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirm Your Order</DialogTitle>
+            <DialogDescription>
+              Please provide your delivery details to complete your order.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Order Summary */}
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <h4 className="font-medium mb-2">Order Summary</h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Items ({items.length})</span>
+                  <span>{formatPrice(total)}</span>
+                </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({appliedCoupon.discount}%)</span>
+                    <span>-{formatPrice(discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-medium border-t pt-1">
+                  <span>Total</span>
+                  <span>{formatPrice(finalTotal)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Delivery Details Form */}
+            <div className="space-y-4">
+              <h4 className="font-medium">Delivery Details</h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customerName">Full Name</Label>
+                  <Input
+                    id="customerName"
+                    placeholder="Enter your full name"
+                    value={orderForm.customerName}
+                    onChange={(e) => setOrderForm(prev => ({ ...prev, customerName: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mobileNumber">Mobile Number</Label>
+                  <Input
+                    id="mobileNumber"
+                    placeholder="Enter mobile number"
+                    value={orderForm.mobileNumber}
+                    onChange={(e) => setOrderForm(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Delivery Address</Label>
+                <Input
+                  id="address"
+                  placeholder="Enter your complete address"
+                  value={orderForm.address}
+                  onChange={(e) => setOrderForm(prev => ({ ...prev, address: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pincode">Pin Code</Label>
+                <Input
+                  id="pincode"
+                  placeholder="Enter pin code"
+                  value={orderForm.pincode}
+                  onChange={(e) => setOrderForm(prev => ({ ...prev, pincode: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Available Coupons */}
+            {availableCoupons.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="font-medium">Available Coupons</h4>
+                <div className="space-y-2">
+                  {availableCoupons.map((coupon) => (
+                    <div
+                      key={coupon.id}
+                      className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-lg cursor-pointer hover:bg-primary/10"
+                      onClick={() => setOrderForm(prev => ({ ...prev, couponCode: coupon.code }))}
+                    >
+                      <div>
+                        <div className="font-medium text-primary">{coupon.code}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {coupon.discountPercent}% off
+                          {coupon.expiryDate && ` • Expires ${new Date(coupon.expiryDate).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOrderForm(prev => ({ ...prev, couponCode: coupon.code }));
+                        }}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Coupon Code Input */}
+            <div className="space-y-2">
+              <Label htmlFor="couponCode">Coupon Code (Optional)</Label>
+              <Input
+                id="couponCode"
+                placeholder="Enter coupon code"
+                value={orderForm.couponCode}
+                onChange={(e) => setOrderForm(prev => ({ ...prev, couponCode: e.target.value.toUpperCase() }))}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowOrderDialog(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handlePlaceOrder}
+                disabled={isProcessing || !orderForm.customerName || !orderForm.mobileNumber || !orderForm.address || !orderForm.pincode}
+                className="flex-1"
+              >
+                {isProcessing ? 'Placing Order...' : 'Place Order'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

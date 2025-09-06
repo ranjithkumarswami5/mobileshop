@@ -33,7 +33,8 @@ type SignupFormData = z.infer<typeof signupSchema>;
 
 export function Auth() {
   const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -159,6 +160,7 @@ export function Auth() {
                         <FormLabel>Email or Mobile Number</FormLabel>
                         <FormControl>
                           <Input
+                            id="login-identifier"
                             placeholder="Enter your email or mobile"
                             className="rounded-xl"
                             {...field}
@@ -178,7 +180,8 @@ export function Auth() {
                         <FormControl>
                           <div className="relative">
                             <Input
-                              type={showPassword ? "text" : "password"}
+                              id="login-password"
+                              type={showLoginPassword ? "text" : "password"}
                               placeholder="Enter your password"
                               className="rounded-xl pr-10"
                               {...field}
@@ -188,9 +191,9 @@ export function Auth() {
                               variant="ghost"
                               size="sm"
                               className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                              onClick={() => setShowPassword(!showPassword)}
+                              onClick={() => setShowLoginPassword(!showLoginPassword)}
                             >
-                              {showPassword ? (
+                              {showLoginPassword ? (
                                 <EyeOff className="h-4 w-4 text-muted-foreground" />
                               ) : (
                                 <Eye className="h-4 w-4 text-muted-foreground" />
@@ -223,6 +226,7 @@ export function Auth() {
                         <FormLabel>Email</FormLabel>
                         <FormControl>
                           <Input
+                            id="signup-email"
                             type="email"
                             placeholder="Enter your email"
                             className="rounded-xl"
@@ -244,6 +248,7 @@ export function Auth() {
                         <FormLabel>Mobile Number</FormLabel>
                         <FormControl>
                           <Input
+                            id="signup-mobile"
                             type="tel"
                             placeholder="Enter your 10-digit mobile number"
                             className="rounded-xl"
@@ -267,7 +272,8 @@ export function Auth() {
                         <FormControl>
                           <div className="relative">
                             <Input
-                              type={showPassword ? "text" : "password"}
+                              id="signup-password"
+                              type={showSignupPassword ? "text" : "password"}
                               placeholder="Create a password"
                               className="rounded-xl pr-10"
                               {...field}
@@ -277,9 +283,9 @@ export function Auth() {
                               variant="ghost"
                               size="sm"
                               className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                              onClick={() => setShowPassword(!showPassword)}
+                              onClick={() => setShowSignupPassword(!showSignupPassword)}
                             >
-                              {showPassword ? (
+                              {showSignupPassword ? (
                                 <EyeOff className="h-4 w-4 text-muted-foreground" />
                               ) : (
                                 <Eye className="h-4 w-4 text-muted-foreground" />
@@ -300,7 +306,8 @@ export function Auth() {
                         <FormLabel>Confirm Password</FormLabel>
                         <FormControl>
                           <Input
-                            type={showPassword ? "text" : "password"}
+                            id="signup-confirm-password"
+                            type={showSignupPassword ? "text" : "password"}
                             placeholder="Confirm your password"
                             className="rounded-xl"
                             {...field}
@@ -329,7 +336,12 @@ export function Auth() {
               <Button
                 variant="link"
                 className="text-primary hover:text-primary/80 p-0 h-auto font-medium"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  // Reset forms when switching modes
+                  loginForm.reset();
+                  signupForm.reset();
+                }}
               >
                 {isLogin ? 'Sign up here' : 'Sign in here'}
               </Button>

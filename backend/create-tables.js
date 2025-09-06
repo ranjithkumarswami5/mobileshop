@@ -42,9 +42,11 @@ async function createTables() {
         id VARCHAR(255) PRIMARY KEY,
         code VARCHAR(20) UNIQUE NOT NULL,
         discount_percent INTEGER NOT NULL CHECK (discount_percent > 0 AND discount_percent <= 100),
+        user_mobile VARCHAR(15),
         is_active BOOLEAN DEFAULT TRUE,
         usage_count INTEGER DEFAULT 0,
-        expiry_date TIMESTAMP
+        expiry_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -54,13 +56,25 @@ async function createTables() {
         id VARCHAR(255) PRIMARY KEY,
         customer_name VARCHAR(255) NOT NULL,
         user_id VARCHAR(255) REFERENCES users(id),
-        total INTEGER NOT NULL,
+        total DECIMAL(10,2) NOT NULL,
         items JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Shipped', 'Delivered', 'Cancelled')),
-        applied_coupon VARCHAR(20)
+        applied_coupon VARCHAR(20),
+        address TEXT,
+        mobile_number VARCHAR(15),
+        pincode VARCHAR(10)
       )
     `);
+
+    // Make user_id nullable for guest orders and drop foreign key constraint
+    try {
+      await pool.query(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_user_id_fkey`);
+      await pool.query(`ALTER TABLE orders ALTER COLUMN user_id DROP NOT NULL`);
+      console.log('Orders table user_id constraint removed and made nullable');
+    } catch (error) {
+      console.log('Error updating user_id constraint:', error.message);
+    }
 
     // Create service_orders table
     await pool.query(`
@@ -71,10 +85,80 @@ async function createTables() {
         device_model VARCHAR(255) NOT NULL,
         serial_number VARCHAR(20) NOT NULL,
         issue_description TEXT NOT NULL,
+        price DECIMAL(10,2),
+        applied_coupon VARCHAR(20),
         status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'In Progress', 'Completed', 'Cancelled')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Create cart table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cart (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255),
+        session_id VARCHAR(255),
+        product_id VARCHAR(255) NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, product_id),
+        UNIQUE(session_id, product_id)
+      )
+    `);
+
+    // Create index for better performance
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
+      CREATE INDEX IF NOT EXISTS idx_cart_session_id ON cart(session_id);
+      CREATE INDEX IF NOT EXISTS idx_cart_product_id ON cart(product_id);
+    `);
+
+    // Create expenses table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id VARCHAR(255) PRIMARY KEY,
+        description VARCHAR(255) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add missing columns to orders table if they don't exist
+    try {
+      await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT`);
+      await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(15)`);
+      await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pincode VARCHAR(10)`);
+      // Try to change total column to DECIMAL
+      await pool.query(`ALTER TABLE orders ALTER COLUMN total TYPE DECIMAL(10,2)`);
+      console.log('Orders table updated with new columns and DECIMAL total');
+    } catch (error) {
+      console.log('Table update failed:', error.message);
+      // If ALTER fails, try to recreate the table
+      try {
+        await pool.query(`DROP TABLE IF EXISTS orders`);
+        await pool.query(`
+          CREATE TABLE orders (
+            id VARCHAR(255) PRIMARY KEY,
+            customer_name VARCHAR(255) NOT NULL,
+            user_id VARCHAR(255),
+            total DECIMAL(10,2) NOT NULL,
+            items JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Shipped', 'Delivered', 'Cancelled')),
+            applied_coupon VARCHAR(20),
+            address TEXT,
+            mobile_number VARCHAR(15),
+            pincode VARCHAR(10)
+          )
+        `);
+        console.log('Orders table recreated with DECIMAL total');
+      } catch (recreateError) {
+        console.log('Table recreation failed:', recreateError.message);
+      }
+    }
 
     console.log('All tables created successfully!');
 
